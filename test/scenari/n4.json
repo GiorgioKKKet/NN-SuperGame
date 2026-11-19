@@ -1,0 +1,3 @@
+[{"mode":"basket","map":"beach","n":2,"teams":[0,1],"pick":[19,0],"secs":5,"pre":"setTimeout(()=>{const p=players[1];BK.pause=0;bkGive(p);const [hx,hz]=bkFoeHoop(p.team);p.x=hx+7.5;p.z=hz;p.bkCharging=true;p.bkChT=bkNeed(p).need*1.1;},1000);setTimeout(()=>{bkShoot(players[1]);},2000);setTimeout(()=>{spawnItem();},2500)",
+  "extra":"ball:!!BK.ball,score:BK.score,sc:document.getElementById('bkscore').textContent,items:items.map(i=>i.w),big:document.getElementById('bigtx')&&document.getElementById('bigtx').textContent","shot":"net_bk",
+  "hostExtra":"JSON.stringify({score:BK.score})"}]

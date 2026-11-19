@@ -1,0 +1,7 @@
+[{"mode":"survival","map":"park","n":2,"pick":[1,24],"secs":3,"fire":false,"pre":"SURV.wave=4;SURV.brk=.1;SURV.healed=true","extra":"wave:SURV.wave,q:SURV.queue.join(''),boss:(minions.find(m=>m.type==='X')||{}).boss"},
+ {"mode":"survival","map":"park","n":2,"pick":[1,24],"secs":1,"fire":false,"pre":"SURV.wave=2;SURV.brk=99;SURV.healed=false;minions.length=0;players[0].hp=50","extra":"hp0:players[0].hp,feed:feedEl.textContent.slice(0,60)"},
+ {"mode":"ffa","map":"porto","n":4,"pick":[1,2,8,20],"secs":6,"extra":"furrows:furrows.filter(f=>f.visible).length"},
+ {"mode":"team","map":"cock","n":4,"pick":[21,22,23,24],"secs":5},
+ {"mode":"koth","map":"morioh","n":4,"pick":[10,6,0,3],"secs":5},
+ {"mode":"tower","map":"park","n":2,"pick":[1,21],"secs":5,"pre":"TD.wave=4;TD.brk=.1"},
+ {"mode":"ffa","map":"mola","n":8,"pick":[0,1,2,3,4,5,6,7],"secs":6}]

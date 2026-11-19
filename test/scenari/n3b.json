@@ -1,0 +1,1 @@
+[{"mode": "tower", "map": "park", "n": 2, "pick": [0, 1], "secs": 4, "pre": "TD.brk=99;stAdd('volcano',TD.core.x+3,TD.core.z);stAdd('pylon',TD.core.x-3,TD.core.z);setTimeout(()=>{TD.hp=1;tdHit(TD.core,9);},1500)", "extra": "st:TD_ST.length,flood:!!TD.flood,over,core:!!TD.core,hp:TD.hp", "hostExtra": "JSON.stringify({flood:!!TD.flood,over,hp:TD.hp})"}]

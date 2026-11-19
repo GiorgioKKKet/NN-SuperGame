@@ -1,0 +1,1 @@
+[{"mode": "tower", "map": "park", "n": 2, "pick": [0, 5], "secs": 5, "pre": "TD.goal=30;TD.wave=19;TD.brk=.1;TD.qT=0;", "extra": "wave:TD.wave,types:[...new Set(minions.map(m=>m.type))].join(''),q:TD.queue.join('')", "shot": "newfoes", "during": "(()=>{const b=minions.find(m=>m.type==='v'||m.type==='p');if(b)setView(b.x,b.z,4,0);})()"}]

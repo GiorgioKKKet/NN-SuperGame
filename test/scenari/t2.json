@@ -1,0 +1,4 @@
+[{"mode":"ffa","map":"villa","n":2,"pick":[24,6],"secs":3,"fire":false,"move":false,
+ "pre":"down.clear();const D=players[0],L=players[1];D.x=17;D.z=6;L.x=17;L.z=10;D.angle=0;L.angle=Math.PI;D.invT=0;L.invT=0;D.hurt(105,L);window.__s=()=>{D.angle=0;D.shieldOn=true;D.weapon==='shield';L.angle=Math.PI;if(L.cd<=0)shoot(L);};window.__iv=setInterval(()=>{D.angle=0;L.angle=Math.PI;D.x=17;D.z=6;L.x=17;L.z=10;if(L.cd<=0)shoot(L);},100)",
+ "during":"down.clear();down.add(\"KeyQ\")","shot":"shield",
+ "extra":"raptor:players[0].raptor,w:players[0].weapon,dHp:players[0].hp,lHp:players[1].hp,refl:projectiles.filter(b=>b.refl).length"}]

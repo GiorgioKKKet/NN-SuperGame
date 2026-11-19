@@ -1,0 +1,3 @@
+[{"mode":"ffa","map":"morioh","n":3,"pick":[21,1,24],"secs":6,"pre":"MORE.ambT=0;MORE.tonT=0","shot":"net_morioh","extra":"amb:!!MORE.amb,ton:MORE.tonOn>0"},
+ {"mode":"ffa","map":"mola","n":2,"pick":[0,22],"secs":5,"pre":"MOLA.nesT=0;MOLA.roachT=0"},
+ {"mode":"survival","map":"park","n":2,"pick":[23,5],"secs":6,"pre":"SURV.brk=99;spawnBoss('blatto',12,8,10);spawnBoss('fatos',8,4,10);spawnBoss('napoli',14,4,10);spawnBoss('sax',6,8,10);spawnBoss('elefante',4,4,15)","shot":"net_boss","extra":"bosses:minions.filter(m=>m.type==='X').length"}]

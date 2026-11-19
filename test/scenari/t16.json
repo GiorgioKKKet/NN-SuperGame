@@ -1,0 +1,3 @@
+[{"mode":"tower","map":"park","n":1,"pick":[0],"secs":1,"fire":false,"move":false,"pre":"TD.brk=99;TD.coins=5000;players[0].x=TD.core.x+3;players[0].z=TD.core.z;players[0].angle=Math.PI/2;placeStart(players[0],'wall');",
+  "during":"(()=>{const p=players[0];window.__i=JSON.stringify({place:p.place&&[p.place.x,p.place.z,p.place.ok],pf:p.placeFire,ang:p.angle,xy:[p.x,p.z]});})()","extra":"i:window.__i"},
+ {"pre":"down.add('KeyQ');1","secs":1,"post":"JSON.stringify({st:TD_ST.map(o=>o.kind+'@'+o.i+','+o.j),place:!!players[0].place,pf:players[0].placeFire})"}]

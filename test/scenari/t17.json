@@ -1,0 +1,4 @@
+[{"mode":"tower","map":"park","n":2,"pick":[0,9],"secs":2,"fire":false,"move":false,"pre":"TD.brk=99;const o=stAdd('mount',TD.core.x+3,TD.core.z);players[0].x=o.x;players[0].z=o.z;","extra":"onTur:!!players[0].onTur,lift:players[0].spLift"},
+ {"pre":"const o=TD_ST[0];players[1].hurt(10,null);players[0].hurt(50,players[1]);window.__h=players[0].hp;down.add('KeyE');setTimeout(()=>down.delete('KeyE'),200);1","secs":1,"post":"JSON.stringify({onTur:!!players[0].onTur,hp:window.__h,max:players[0].maxHp})"},
+ {"pre":"TD.wave=TD.goal;TD.paid=false;minions.length=0;TD.queue=[];TD.brk=99;players.forEach(p=>{p.x=TD.core.x+2+p.id;p.z=TD.core.z+2;});setView(TD.core.x+2,TD.core.z+1,3.5,0);1","secs":2,"shot":"cheer","post":"JSON.stringify({cheer:!!TD.cheer,cheerT:TD.cheerT,over,won:TD.won})"},
+ {"pre":"1","secs":3,"post":"JSON.stringify({over,won:TD.won})"}]

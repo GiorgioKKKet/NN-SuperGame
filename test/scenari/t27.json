@@ -1,0 +1,3 @@
+[{"mode":"ffa","map":"parch","n":2,"pick":[0,1],"secs":3,"fire":false,"move":false,"pre":"1","shot":"m_parch"},
+ {"mode":"ffa","map":"morioh","n":2,"pick":[0,1],"secs":3,"fire":false,"move":false,"pre":"setView(30,8,9,0)","shot":"m_morioh"},
+ {"mode":"ffa","map":"mola","n":2,"pick":[0,1],"secs":3,"fire":false,"move":false,"pre":"setView(10,14,9,0)","shot":"m_mola"}]

@@ -1,0 +1,1 @@
+[{"mode": "ffa", "map": "park", "n": 2, "pick": [8, 6], "secs": 2, "fire": false, "move": false, "pre": "down.clear();const a=players[0],b=players[1];a.x=10;a.z=8;b.x=13;b.z=8.2;a.angle=Math.PI/2;a.spF=1;spTry(a);setView(11.5,8,3.2,0);setTimeout(()=>{paused=true},900);", "shot": "sp_timestop"}]

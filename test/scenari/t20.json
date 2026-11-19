@@ -1,0 +1,2 @@
+[{"mode":"basket","map":"amaz","n":2,"pick":[19,0],"secs":1,"fire":false,"move":false,"pre":"1"},
+ {"pre":"(()=>{const p=players[0];BK.pause=0;bkGive(p);const [hx,hz]=bkFoeHoop(p.team);p.x=hx-7.5;p.z=hz+1;const N=bkNeed(p);p.bkChT=N.need*1.1;window.__n=JSON.stringify({N,pw:bkPow(p.bkChT),team:p.team,hx,hz,x:p.x});bkShoot(p);window.__s=JSON.stringify(BK.ball.sh&&{ok:BK.ball.sh.ok,three:BK.ball.sh.three,T:BK.ball.sh.T,to:BK.ball.sh.to});return 1;})()","secs":3,"post":"JSON.stringify({n:window.__n,s:window.__s,score:BK.score,st:BK.ball.st})"}]

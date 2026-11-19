@@ -1,0 +1,2 @@
+[{"mode":"ffa","map":"mola","n":2,"pick":[0,1],"secs":2,"fire":false,"move":false,"pre":"down.clear();MOLA.nesT=99;MOLA.roachT=99;players[0].x=molaShore(12)+1.5;players[0].z=12.5;players[0].invT=0;players[1].x=30;players[1].z=20",
+ "during":"(()=>{if(!window.__n){window.__n=1;MOLA.nesT=0;setView(9,12,4,0);}})()","post":"new Promise(r=>setTimeout(r,250))","shot":"gianni","extra":"ph:MOLA.nes.phase,t:MOLA.nes.t,dead:players[0].dead,feed:feedEl.textContent.slice(0,80)"}]

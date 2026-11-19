@@ -1,0 +1,7 @@
+[{"mode":"ffa","map":"morioh","n":4,"pick":[3,8,17,20],"secs":6,"pre":"players.forEach(p=>p.spF=.98)"},
+ {"mode":"team","map":"cock","n":4,"teams":[0,0,1,1],"pick":[15,14,13,11],"secs":6,"pre":"players.forEach(p=>p.spF=1);setTimeout(()=>players.forEach(p=>spTry(p)),1500)"},
+ {"mode":"koth","map":"mola","n":4,"pick":[1,5,6,9],"secs":5,"pre":"players.forEach(p=>p.spF=1);setTimeout(()=>players.forEach(p=>spTry(p)),1500)"},
+ {"mode":"survival","map":"park","n":2,"pick":[18,4],"secs":6,"pre":"SURV.brk=.5;players.forEach(p=>p.spF=1);setTimeout(()=>players.forEach(p=>spTry(p)),2500)","extra":"wave:SURV.wave"},
+ {"mode":"tower","map":"park","n":2,"pick":[7,22],"secs":6,"pre":"TD.brk=.5;players.forEach(p=>p.spF=1);setTimeout(()=>players.forEach(p=>spTry(p)),2500)"},
+ {"mode":"mobile","map":"park","n":1,"pick":[19],"secs":4,"pre":"SURV.brk=.5;players[0].spF=1","shot":"mobile_sp"},
+ {"mode":"ffa","map":"bilocale","n":2,"pick":[3,0],"secs":4,"pre":"players[0].spF=1;players[0].x=5;setTimeout(()=>spTry(players[0]),1200)","extra":"broken:FURN_BROKEN,furn:FURN.length"}]

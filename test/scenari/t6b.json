@@ -1,0 +1,2 @@
+[{"mode":"survival","map":"park","n":2,"pick":[1,24],"secs":3,"fire":false,"pre":"SET.survMap=0;SURV.wave=4;SURV.brk=.1;SURV.healed=true","extra":"wave:SURV.wave,q:SURV.queue.join(''),boss:(minions.find(m=>m.type==='X')||{}).boss,mins:minions.length"},
+ {"mode":"team","map":"cock","n":4,"teams":[0,0,1,1],"pick":[21,22,23,24],"secs":5}]

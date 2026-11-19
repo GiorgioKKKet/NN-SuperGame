@@ -1,0 +1,2 @@
+[{"mode":"ffa","map":"park","n":4,"pick":[0,21,14,24],"secs":2,"fire":false,"move":false,"pre":"down.clear();players.forEach((p,i)=>{p.x=8+i*1.6;p.z=8;p.angle=0;});setView(10.4,8,3,0);players.forEach((p,i)=>emoteStart(p,i));setTimeout(()=>{paused=true},800)","shot":"emotes","extra":"emo:players.map(p=>p.emoT>0?p.emo:-1).slice(0,4)"},
+ {"mode":"ffa","map":"park","n":2,"pick":[0,6],"secs":2,"fire":false,"move":false,"pre":"down.clear();players[0].spF=.6;players[1].spF=1;setView(10,8,5,0)","shot":"rings"}]
