@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boss: il serpente</title>
+<style>
+  :root{--bg:#e9ebf0;--line:#cfd4de;--ink:#1c2030;--panel:rgba(255,255,255,.88);--edge:#b6bdcc;--acc:#3949ab;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}}
+  :root[data-theme="dark"]{--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  #top{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;padding:10px 14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;pointer-events:none;font-size:12px}
+  #top b{font-size:16px;letter-spacing:2px}
+  #info{position:fixed;left:50%;transform:translateX(-50%);top:calc(46px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);padding:6px 12px;font-size:12px;text-align:center;max-width:92vw}
+  #bar{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:2px solid var(--edge);padding:8px 12px;cursor:pointer}
+  button.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+</style>
+</head>
+<body>
+<div id="top"><b>BOSS: IL SERPENTE</b><span>trascina: ruota · rotella: zoom</span></div>
+<div id="info"></div>
+<div id="bar"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================= HELPER =================
+const V=.1;                                   // 1 voxel = 0.1 unita
+const rng=s=>()=>(s=s*16807%2147483647)/2147483647;
+const MC={},M=c=>MC[c]||(MC[c]=new THREE.MeshLambertMaterial({color:c}));
+const TM=cv=>{const t=new THREE.CanvasTexture(cv);t.magFilter=t.minFilter=THREE.NearestFilter;return new THREE.MeshLambertMaterial({map:t});};
+const cvs=(w,h,fn)=>{const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'));return c;};
+const R=(g,c,x,y,w,h)=>{g.fillStyle=c;g.fillRect(x,y,w||1,h||1);};
+const box=(p,w,h,d,x,y,z,m)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w*V,h*V,d*V),m);o.position.set(x*V,y*V,z*V);o.castShadow=true;p.add(o);return o;};
+const F=(base,o)=>{o=o||{};return [o.r||base,o.l||base,o.t||base,o.b||base,o.f||base,o.k||base].map(x=>typeof x==='number'?M(x):x);}; // +x,-x,+y,-y,+z(fronte),-z(retro)
+const DOWN=new THREE.Vector3(0,-1,0), AX=new THREE.Vector3(1,0,0);
+const qd=d=>new THREE.Quaternion().setFromUnitVectors(DOWN,new THREE.Vector3(d[0],d[1],d[2]).normalize());
+
+// braccio a 2 segmenti: la posa si da' con due direzioni (spalla->gomito, gomito->mano); x e' specchiata da s
+function arm(p,s,x,y,a){
+  const sh=new THREE.Group();sh.position.set(x*V,y*V,0);p.add(sh);
+  const base=qd([a.d1[0]*s,a.d1[1],a.d1[2]]);sh.quaternion.copy(base);
+  box(sh,a.w,a.l1,a.d,0,-a.l1/2,0,a.m1);
+  if(a.up)a.up(sh,s);
+  const el=new THREE.Group();el.position.y=-a.l1*V;sh.add(el);
+  el.quaternion.copy(base).invert().multiply(qd([a.d2[0]*s,a.d2[1],a.d2[2]]));
+  box(el,a.w*.95,a.l2,a.d*.95,0,-a.l2/2,0,a.m2||a.m1);
+  const hd=new THREE.Group();hd.position.y=-a.l2*V;el.add(hd);
+  if(a.hand)a.hand(hd,s);
+  return {sh,base,hold:!!a.hold,s};
+}
+function leg(p,s,gap,hy,a){const g=new THREE.Group();g.position.set(s*gap*V,hy*V,0);p.add(g);box(g,a.w,a.l,a.d,0,-a.l/2,0,a.m);if(a.ex)a.ex(g,s);return g;}
+function head(p,y,o){
+  const h=new THREE.Group();h.position.y=y*V;p.add(h);
+  box(h,o.w||8,8,o.d||8,0,4,0,F(o.skin,{f:o.front,r:o.sr||o.side,l:o.sl||o.side,t:o.top,k:o.back}));
+  box(h,o.neck||3,1.6,o.neck||3,0,-.6,0,M(o.skin));
+  return h;
+}
+const hand=(hd,skin,w)=>box(hd,w||3.4,3,w||3.4,0,-1.5,0,M(skin));
+const FACE=(sk,fn)=>TM(cvs(16,16,g=>{R(g,sk,0,0,16,16);fn(g);}));
+const SIDE=(sk,hc,hn,bc)=>FACE(sk,g=>{R(g,hc,0,0,16,hn);if(bc)R(g,bc,0,10,16,6);R(g,'#cf9873',6,6,3,4);});
+const D1=[.08,-1,0],D2=[.05,-1,.15];
+function person(o){
+  const root=new THREE.Group(),b=new THREE.Group();root.add(b);
+  const hy=o.hip||16,th=o.th||14,tw=o.tw||11,td=o.td||6,aw=o.aw||4,ad=o.ad||4.4;
+  const legs=[-1,1].map(s=>leg(b,s,o.gap||2.5,hy,{w:o.lw||4.8,l:o.ll||hy,d:o.ld||5.6,m:o.lm,ex:o.lex}));
+  box(b,tw,th,td,0,hy+th/2,0,F(o.tc,{f:o.tf,k:o.tk,r:o.tr,l:o.tl}));
+  if(o.bd)o.bd(b,hy,th,tw,td);
+  const h=head(b,hy+th,{skin:o.skin,front:o.ff,side:o.fs,sr:o.fsr,sl:o.fsl,top:M(o.ht||o.skin),back:M(o.hb||o.skin),w:o.hw,d:o.hdp,neck:o.neck});
+  if(o.hdec)o.hdec(h);
+  const ax=tw/2+aw/2-.2,ay=hy+th-1.5;
+  const arms=[1,-1].map(s=>arm(b,s,s*ax,ay,Object.assign({w:aw,l1:6.5,l2:6.5,d:ad,m1:o.am1||M(o.skin),m2:o.am2,d1:D1,d2:D2,hand:hd=>hand(hd,o.skin)},o.arm(s))));
+  return {root,body:b,legs,arms};
+}
+const sleeve=(c,aw,ad,len)=>sh=>box(sh,aw+.6,len||3.8,ad+.6,0,-(len||3.8)/2,0,M(c));
+const shoes=(g,c,sole,y)=>{box(g,5.2,3.2,8.4,0,y,1.5,M(c));box(g,5.4,1.1,8.8,0,y-1.05,1.5,M(sole));box(g,4.6,1.2,2.6,0,y+1.5,3.7,M(c));};
+
+// ================= BOSS: il serpente (pitone birmano) =================
+function serpente(){
+  const rg=rng(11),rd=()=>rg();
+  const tan='#c9a06a',dk='#2e1a10',cr='#f3e8cc',mid='#bf7d55',ink='#9c5c3c',bel='#e7d4a8',pink=0xe08ea2,vio=0x5b2a73;
+  const speck=(g,w,h)=>{for(let k=0;k<w*h/7;k++)R(g,rd()<.5?'#b88f5a':'#d6b480',rd()*w|0,rd()*h|0);};
+  const blob=(g,cx,cy,rx,ry)=>{for(let y=0;y<g.canvas.height;y++)for(let x=0;x<g.canvas.width;x++){const d=Math.hypot((x+.5-cx)/rx,(y+.5-cy)/ry);if(d<1.18)R(g,d>.96?cr:d>.8?dk:d>.34?mid:ink,x,y);}};
+  const topT=()=>TM(cvs(28,16,g=>{R(g,tan,0,0,28,16);speck(g,28,16);blob(g,14+rd()*4-2,8+rd()*2-1,8+rd()*2,6+rd());blob(g,-1,8,4,5);blob(g,29,8,4,5);}));
+  const sideT=()=>TM(cvs(16,24,g=>{R(g,tan,0,0,16,24);speck(g,16,24);blob(g,4+rd()*8,6+rd()*2,5+rd()*2,5);R(g,bel,0,17,16,7);R(g,'#d9c394',0,16,16,1);}));
+  const vars=[0,1,2,3,4].map(()=>({t:topT(),r:sideT(),l:sideT()}));
+  const endM=M(0xb98a5a),belM=M(0xe7d4a8),jm=M(0xbd9660);
+  const N=36,L=8,rx=[],ry=[];
+  for(let j=0;j<N;j++){let a=0,y=0;if(j<5)a=-.27;else if(j>=10&&j<15)a=.27;else if(j>=19)y=.24+(j-19)/(N-20)*.3;rx.push(a);ry.push(y);}
+  const thick=j=>{const t=j/(N-1);return t<.15?9+t/.15*3:t<.55?12+(t-.15)/.4*2.5:Math.max(2.4,14.5*Math.pow(1-(t-.55)/.45,.85));};
+  const root=new THREE.Group(),pv=new THREE.Group(),dummy=new THREE.Group();root.add(pv);root.add(dummy);
+  const gs=[];let par=pv;
+  for(let j=0;j<N;j++){
+    const g=new THREE.Group();if(j)g.position.z=-L*V;g.rotation.x=rx[j];g.rotation.y=ry[j];par.add(g);gs.push(g);par=g;
+    const w=thick(j),h=w*.86,v=vars[j%5];
+    box(g,w,h,L+.6,0,0,-L/2,[M(0xc9a06a),M(0xc9a06a),M(0xc9a06a),M(0xc9a06a),endM,endM].map((m,i)=>i===0?v.r:i===1?v.l:i===2?v.t:i===3?belM:m));
+    box(g,w*.94,h*.94,w*.94,0,0,0,jm);
+  }
+  // ---- testa ----
+  const hd=new THREE.Group();hd.rotation.x=.38;gs[0].add(hd);
+  const headTop=TM(cvs(22,24,g=>{R(g,tan,0,0,22,24);speck(g,22,24);R(g,cr,7,3,1,18);R(g,cr,14,3,1,18);R(g,dk,8,3,6,18);R(g,mid,9,5,4,3);R(g,mid,9,11,4,3);R(g,dk,2,9,4,1);R(g,dk,16,9,4,1);}));
+  const headSide=TM(cvs(24,14,g=>{R(g,tan,0,0,24,14);speck(g,24,14);R(g,cr,5,5,16,1);R(g,dk,5,6,16,2);R(g,mid,12,3,6,1);R(g,bel,0,10,24,4);R(g,'#d9c394',0,9,24,1);}));
+  box(hd,11,7,12,0,0,6,F(0xc9a06a,{t:headTop,r:headSide,l:headSide,b:belM}));
+  box(hd,8.4,4.8,4,0,-.7,13.5,F(0xdcc79c,{t:M(0xd3bb8c)}));
+  [-1,1].forEach(s=>{
+    box(hd,1,.8,.6,s*1.8,.6,15.7,M(0x2a1a10));
+    box(hd,1.2,2,2,s*5.9,1.2,7.5,M(0x0a0a0a));box(hd,.4,.7,.7,s*6.55,1.8,7.2,M(0xffffff));
+    const br=box(hd,1.8,1,5,s*4.4,3.6,7.4,M(0x6e4228));br.rotation.y=s*.12;
+    box(hd,.8,2.6,.8,s*2.4,-4.8,11.2,M(0xf8f4e8));
+  });
+  box(hd,9,.6,10,0,-3.5,6.5,M(pink));
+  const jw=new THREE.Group();jw.position.set(0,-3.6*V,1.5*V);hd.add(jw);
+  box(jw,9.4,2.4,11,0,-1.2,5.5,F(0xe7d4a8,{t:pink}));
+  const tg=new THREE.Group();tg.position.set(0,.5*V,3*V);jw.add(tg);
+  box(tg,1.5,.5,9,0,0,4.5,M(vio));
+  [-1,1].forEach(s=>{const f=box(tg,.8,.5,3.6,s*.9,0,10.6,M(vio));f.rotation.y=-s*.3;});
+  // ---- posizione: pivot al centro, a terra, scala boss ----
+  const S=1.25;root.scale.setScalar(S);root.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(root);
+  pv.position.set(-(bb.min.x+bb.max.x)/2/S,-bb.min.y/S,-(bb.min.z+bb.max.z)/2/S);
+  let sway=.05;
+  return {root,body:dummy,legs:[{rotation:{x:0}},{rotation:{x:0}}],arms:[],
+    walk:(w,amp)=>{sway=amp?.1:.05;},
+    fx:t=>{
+      gs.forEach((g,j)=>{if(j<15)g.rotation.y=Math.sin(t*1.5-j*.45)*sway*(j<5?.6:1);else if(j>=19)g.rotation.y=ry[j]+Math.sin(t*1.5-j*.35)*sway*.4;});
+      jw.rotation.x=.45+.22*Math.sin(t*1.7);
+      tg.scale.z=.25+.75*Math.pow(Math.max(0,Math.sin(t*2.6)),2);tg.rotation.y=Math.sin(t*9)*.08;
+    }};
+}
+
+// ================= SCENA =================
+const CH=[
+  {n:'BOSS: il serpente',mk:serpente,gr:34,ty:3.5,pos:[0,0],info:'Pitone gigante a rosette marroni bordate di scuro e crema su fondo beige, pancia chiara, muso beige con occhi neri a bottone, sopracciglia pesanti, bocca rosa spalancata con zanne e lingua viola biforcuta. Testa sollevata, corpo attorcigliato a spirale.'},
+];
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(34,1,.1,200);
+scene.add(new THREE.HemisphereLight(0xffffff,0x9aa0b4,.85));
+const sun=new THREE.DirectionalLight(0xffffff,.75);sun.position.set(9,22,14);sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
+Object.assign(sun.shadow.camera,{left:-26,right:26,top:26,bottom:-26,near:1,far:70});scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshLambertMaterial({color:0xffffff}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+function theme(){
+  const cs=getComputedStyle(document.documentElement),bg=cs.getPropertyValue('--bg').trim(),ln=cs.getPropertyValue('--line').trim();
+  scene.background=new THREE.Color(bg);
+  const t=new THREE.CanvasTexture(cvs(64,64,g=>{R(g,bg,0,0,64,64);R(g,ln,0,0,64,1);R(g,ln,0,0,1,64);}));
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(200,200);t.anisotropy=8;ground.material.map=t;ground.material.needsUpdate=true;
+}
+theme();matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+const COLS=4;
+const chars=CH.map((c,i)=>{const o=c.mk(),row=i/COLS|0,col=i%COLS,n=Math.min(COLS,CH.length-row*COLS);
+  const pp=c.pos||[(col-(n-1)/2)*5.8,row*7];o.root.position.set(pp[0],0,pp[1]);o.yaw=i*.5;scene.add(o.root);return o;});
+
+// ================= CAMERA / UI =================
+const O={th:0,ph:.5,r:20,tx:0,tz:0,ty:2.2,gr:34,gx:0,gz:0};
+let sel=0,walk=false,auto=true,drag=null;
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;O.th-=(e.clientX-drag.x)*.006;O.ph=Math.max(.05,Math.min(1.4,O.ph+(e.clientY-drag.y)*.005));drag={x:e.clientX,y:e.clientY};});
+cv.addEventListener('pointerup',()=>drag=null);
+cv.addEventListener('wheel',e=>{O.gr=Math.max(5,Math.min(50,O.gr*(1+e.deltaY*.001)));e.preventDefault();},{passive:false});
+const keys={};addEventListener('keydown',e=>{keys[e.code]=1;if(e.code.startsWith('Arrow'))e.preventDefault();});addEventListener('keyup',e=>keys[e.code]=0);
+const bar=document.getElementById('bar'),info=document.getElementById('info');
+function ui(){
+  bar.innerHTML='';
+  const add=(t,on,fn)=>{const b=document.createElement('button');b.textContent=t;if(on)b.className='on';b.onclick=fn;bar.appendChild(b);};
+    CH.forEach((c,i)=>add(c.n,sel===i,()=>{sel=i;O.gr=c.gr||8;ui();}));
+  add('Gira: '+(auto?'sì':'no'),auto,()=>{auto=!auto;ui();});
+  add('Cammina (WASD/frecce): '+(walk?'sì':'no'),walk,()=>{if(sel<0)sel=0,O.gr=CH[0].gr||8;walk=!walk;ui();});
+  info.textContent=sel<0?'Il boss serpente voxel. Attiva "Cammina" per muoverlo.':CH[sel].n+' — '+CH[sel].info;
+}
+ui();
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+function animate(c,t,moving){
+  const w=moving?Math.sin(t*10):0,amp=moving?.75:0;
+  c.legs[0].rotation.x=w*amp;c.legs[1].rotation.x=-w*amp;
+  c.arms.forEach(a=>{if(!a.hold)a.sh.quaternion.setFromAxisAngle(AX,-w*amp*.8*a.s).multiply(a.base);});
+  c.body.position.y=moving?Math.abs(Math.sin(t*10))*.05:Math.sin(t*2)*.01;
+  if(c.walk)c.walk(w,amp);if(c.fx)c.fx(t);
+}
+let last=performance.now(),T=0;
+function frame(ts){
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;T+=dt;
+  chars.forEach((c,i)=>{
+    let moving=false;
+    if(walk&&i===sel){
+      let f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0),r=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+      if(f||r){const l=Math.hypot(f,r);f/=l;r/=l;
+        const dx=-Math.sin(O.th)*f+Math.cos(O.th)*r,dz=-Math.cos(O.th)*f-Math.sin(O.th)*r;
+        c.root.position.x=Math.max(-24,Math.min(24,c.root.position.x+dx*4*dt));c.root.position.z=Math.max(-24,Math.min(24,c.root.position.z+dz*4*dt));
+        let d=Math.atan2(dx,dz)-c.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));c.yaw+=d*Math.min(1,dt*12);moving=true;}
+    } else if(auto) c.yaw+=dt*.7;
+    c.root.rotation.y=c.yaw;animate(c,T,moving);
+  });
+  const tgt=sel>=0?chars[sel].root.position:{x:0,z:0};
+  const k=Math.min(1,dt*5);O.tx+=(tgt.x-O.tx)*k;O.tz+=(tgt.z-O.tz)*k;O.ty+=((sel>=0?(CH[sel].ty||2):3)-O.ty)*k;O.r+=(O.gr-O.r)*k;
+  cam.position.set(O.tx+O.r*Math.cos(O.ph)*Math.sin(O.th),O.ty+O.r*Math.sin(O.ph),O.tz+O.r*Math.cos(O.ph)*Math.cos(O.th));
+  cam.lookAt(O.tx,O.ty,O.tz);
+  renderer.render(scene,cam);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

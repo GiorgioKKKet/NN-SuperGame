@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Boss – Blattonoide</title>
+<style>
+  :root{--bg:#e9ebf0;--line:#cfd4de;--ink:#1c2030;--panel:rgba(255,255,255,.88);--edge:#b6bdcc;--acc:#3949ab;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}}
+  :root[data-theme="dark"]{--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  #top{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;padding:10px 14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;pointer-events:none;font-size:12px}
+  #top b{font-size:16px;letter-spacing:2px}
+  #info{position:fixed;left:50%;transform:translateX(-50%);top:calc(46px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);padding:6px 12px;font-size:12px;text-align:center;max-width:92vw}
+  #bar{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:2px solid var(--edge);padding:8px 12px;cursor:pointer}
+  button.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+</style>
+</head>
+<body>
+<div id="top"><b>BOSS · BLATTONOIDE-9</b><span>trascina: ruota · rotella: zoom · WASD: muovi · 1 spada · 2 raggio · 3 combo</span></div>
+<div id="info"></div>
+<div id="bar"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================= HELPER (stesso stile voxel dei personaggi) =================
+const V=.1;                                    // 1 voxel = 0.1 unita
+const rng=s=>()=>(s=s*16807%2147483647)/2147483647;
+const MC={},M=c=>MC[c]||(MC[c]=new THREE.MeshLambertMaterial({color:c}));
+const TM=cv=>{const t=new THREE.CanvasTexture(cv);t.magFilter=t.minFilter=THREE.NearestFilter;return new THREE.MeshLambertMaterial({map:t});};
+const cvs=(w,h,fn)=>{const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'));return c;};
+const R=(g,c,x,y,w,h)=>{g.fillStyle=c;g.fillRect(x,y,w||1,h||1);};
+const box=(p,w,h,d,x,y,z,m)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w*V,h*V,d*V),m);o.position.set(x*V,y*V,z*V);o.castShadow=true;p.add(o);return o;};
+const F=(base,o)=>{o=o||{};return [o.r||base,o.l||base,o.t||base,o.b||base,o.f||base,o.k||base].map(x=>typeof x==='number'?M(x):x);}; // +x,-x,+y,-y,+z(fronte),-z(retro)
+const BM=(c,o)=>new THREE.MeshBasicMaterial(Object.assign({color:c},o||{}));
+const GLOW=(c,op)=>BM(c,{transparent:true,opacity:op==null?1:op,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+const grp=(p,x,y,z)=>{const g=new THREE.Group();g.position.set(x*V,y*V,z*V);p.add(g);return g;};
+const ball=(g,m,r,x,y,z)=>{const o=new THREE.Mesh(new THREE.IcosahedronGeometry(r*V,1),m);o.position.set(x*V,y*V,z*V);g.add(o);return o;};
+const cyl=(g,c,r,h,x,y,z,rx)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(r*V,r*V,h*V,8),M(c));o.position.set(x*V,y*V,z*V);o.rotation.x=rx||0;o.castShadow=true;g.add(o);return o;};
+
+// materiali
+const chit=M(0x5c2a12),chit2=M(0x7a3a1a),chitD=M(0x3a1a0c),chitL=M(0xa8602c),steel=M(0x8a95a5),steelD=M(0x4a5260),steelL=M(0xc4ccd8),dark=M(0x14161c);
+const lC=BM(0x35e8ff),lR=BM(0xff2a2a),lG=BM(0x5aff7a),lA=BM(0xffb020);
+
+// textures pixel
+const wingTex=TM(cvs(16,40,g=>{R(g,'#6b3213',0,0,16,40);R(g,'#4a2208',0,0,1,40);R(g,'#4a2208',15,0,1,40);R(g,'#a65a2a',3,2,2,34);R(g,'#8a4a20',6,4,1,32);R(g,'#8a4a20',10,6,1,30);
+  for(let y=6;y<38;y+=6)R(g,'#5a2a10',2,y,12,1);R(g,'#2a1206',0,38,16,2);}));
+const chestTex=TM(cvs(34,30,g=>{R(g,'#5c2a12',0,0,34,30);R(g,'#7a3a1a',0,0,34,2);
+  R(g,'#8a95a5',5,3,24,24);R(g,'#4a5260',5,3,24,1);R(g,'#4a5260',5,26,24,1);R(g,'#4a5260',5,3,1,24);R(g,'#4a5260',28,3,1,24);
+  [[7,5],[26,5],[7,24],[26,24]].forEach(([x,y])=>R(g,'#d8e0ec',x,y,1,1));
+  for(let y=20;y<26;y+=2)R(g,'#2a3040',9,y,16,1);for(let x=9;x<25;x+=3)R(g,'#35e8ff',x,6,1,1);
+  for(let y=-6;y<=6;y++)for(let x=-6;x<=6;x++){const d=x*x+y*y;if(d<=36&&d>=20)R(g,'#2a3040',17+x,13+y,1,1);if(d<20)R(g,'#0a2a34',17+x,13+y,1,1);}}));
+const headTex=TM(cvs(24,18,g=>{R(g,'#4a2410',0,0,24,18);R(g,'#6b3213',0,0,24,2);
+  R(g,'#1a0d06',2,4,9,8);R(g,'#2a1408',3,5,7,6);for(let y=5;y<11;y+=2)for(let x=3;x<10;x+=2)R(g,'#3a1e0c',x,y,1,1);R(g,'#d89a40',4,5,2,1);R(g,'#f0c070',4,5,1,1);   // occhio organico
+  R(g,'#2a0a0a',13,4,9,8);R(g,'#ff2a2a',14,5,7,6);R(g,'#600808',15,6,5,4);R(g,'#ff9090',17,7,1,2);R(g,'#ff9090',16,8,3,1);                                          // occhio cibernetico
+  R(g,'#8a95a5',12,3,11,1);R(g,'#8a95a5',12,12,11,1);R(g,'#8a95a5',12,3,1,10);R(g,'#8a95a5',22,3,1,10);
+  R(g,'#2a1408',8,14,8,3);R(g,'#8a95a5',7,13,10,1);for(let x=8;x<16;x+=2)R(g,'#c4ccd8',x,14,1,2);}));
+
+// ================= SCENA =================
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(34,1,.1,200);
+scene.add(new THREE.HemisphereLight(0xffffff,0x9aa0b4,.85));
+const sun=new THREE.DirectionalLight(0xffffff,.75);sun.position.set(8,20,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:1,far:60});scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshLambertMaterial({color:0xffffff}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+function theme(){
+  const cs=getComputedStyle(document.documentElement),bg=cs.getPropertyValue('--bg').trim(),ln=cs.getPropertyValue('--line').trim();
+  scene.background=new THREE.Color(bg);
+  const t=new THREE.CanvasTexture(cvs(64,64,g=>{R(g,bg,0,0,64,64);R(g,ln,0,0,64,1);R(g,ln,0,0,1,64);}));
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(200,200);t.anisotropy=8;ground.material.map=t;ground.material.needsUpdate=true;
+}
+theme();matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+
+// ================= BOSS: BLATTONOIDE-9 =================
+const root=new THREE.Group();scene.add(root);
+const body=grp(root,0,0,0);
+// --- gambe digitigrade (2) con ginocchio meccanico ---
+const legs=[];
+[-1,1].forEach(s=>{
+  const hip=grp(body,s*5.5,22.8,0),knee=grp(hip,0,-11,0),ank=grp(knee,0,-11,0);
+  box(hip,5.4,11,5.6,0,-5.5,0,chit);box(hip,5.8,3,6,0,-1.5,0,chit2);
+  for(let k=0;k<3;k++)box(hip,1,2.2,1,s*3.1,-3-k*3,-1.5,chitL);                       // spine sulla coscia
+  box(hip,1.4,8,1.4,0,-5.5,3.4,steelL);box(hip,2,4,2,0,-8.5,3.2,steelD);                // pistone idraulico
+  box(knee,5.6,5.6,5.6,0,0,0,steel);box(knee,3,3,6.4,0,0,0,steelD);ball(knee,lC,1.1,s*2.9,0,0);
+  box(knee,4.2,11,4.2,0,-5.5,0,chit2);box(knee,3.4,6.4,.8,0,-4.8,2.5,steel);
+  for(let k=0;k<4;k++){box(knee,.9,2.6,.9,s*1.4,-2-k*2.4,-2.6,chitL).rotation.x=.5;box(knee,.9,2.6,.9,-s*1.4,-2-k*2.4,-2.6,chitL).rotation.x=.5;}
+  box(ank,5.4,2.2,9,0,-1,2.6,chitD);box(ank,5.6,.8,9.2,0,-2.2,2.6,steelD);
+  [-1.8,0,1.8].forEach(x=>box(ank,1.3,1.3,3.4,x,-1.4,8,steelL));box(ank,1.4,1.4,3,0,-1,-2.8,chitL);
+  legs.push({hip,knee,ank});
+});
+// --- bacino ---
+box(body,13,4,8,0,24.8,0,chitD);box(body,14,1.5,8.6,0,26.6,0,steel);box(body,9,4,3,0,22.5,-3.5,steelD);
+// --- busto ---
+const torso=grp(body,0,27.5,0);
+box(torso,12,4,8,0,1,0,chit2);
+for(let i=0;i<3;i++){const p=box(torso,10-i*1.5,3,5,0,-1-i*2.4,-5.5-i*1.8,i%2?chit2:chit);p.rotation.x=.45+i*.1;}     // addome a placche
+[-1,1].forEach(s=>{box(torso,1.1,1.1,5,s*1.8,-8.5,-12,steelL).rotation.x=.5;ball(torso,lR,.7,s*1.8,-9.6,-14.2);});     // cerci con LED
+box(torso,17,15,9.5,0,10,0,F(chit,{f:chestTex}));
+const core=ball(torso,lC,2,0,11,5.3);                                                  // reattore
+box(torso,13.5,3.2,11,0,18.5,-.5,chit2);box(torso,14.5,1,11.6,0,20.3,-.5,chitL);      // pronoto
+box(torso,5,3,5,0,21,0,steelD);
+[-1.6,1.6].forEach(x=>{box(torso,.8,6,.8,x,19,4.6,M(0x1a1a22));box(torso,.9,.9,.9,x,17,4.6,lA);});   // cavi
+[-1,1].forEach(s=>{box(torso,7,5.5,8,s*11,19,0,chit);box(torso,7.4,1.2,8.4,s*11,21.8,0,chitL);
+  for(let k=0;k<3;k++)box(torso,1.2,2.6,1.2,s*(8.6+k*2.4),22.8,0,steelL);box(torso,2,2,2,s*11,18.5,4.4,steelL);});
+const wings=[-1,1].map(s=>{const w=grp(torso,s*3.5,19,-5);box(w,7.4,19,1.8,s*3.8,-9,0,F(chit2,{f:wingTex,k:wingTex}));box(w,7.6,1,2,s*3.8,.2,0,steel);return {w,s};});
+const nozzles=[-1,1].map(s=>{box(torso,3.4,6,3.4,s*4.5,5,-5.5,steelD);return ball(torso,GLOW(0x4af0ff,.9),1.3,s*4.5,1.6,-5.5);});
+// --- testa ---
+const head=grp(torso,0,21,1.5);
+box(head,12,9,9,0,4.5,0,F(chit,{f:headTex,t:chit2}));box(head,13.2,2.2,9.6,0,8.6,.2,chit2);
+box(head,.8,6.4,5.4,6.2,4.6,-.4,steel);ball(head,lR,.5,6.7,6.5,2);ball(head,lG,.5,6.7,5,2.4);box(head,.5,4,.5,5.6,1.2,2.8,M(0xff7a1a));box(head,.5,4,.5,-5.8,2,2.8,M(0x2a6aff));
+const eyeG=ball(head,GLOW(0xff3030,.55),1.7,2.25,5,4.9);
+const mand=[-1,1].map(s=>{const m=grp(head,s*3,1.6,4.6);box(m,1.8,1.6,5,s*.6,-.4,2.2,chitD);box(m,1.2,1.4,2.8,-s*.6,-.4,5.4,steelL);return {m,s};});
+function chain(p,x,y,z,n,len,w,cols,rz){const out=[];let par=grp(p,x,y,z);par.rotation.set(-.5,0,rz);
+  for(let i=0;i<n;i++){const wi=Math.max(.6,w*(1-i/(n+2)));box(par,wi,len,wi,0,len/2,0,cols[i%cols.length]);const g=grp(par,0,len,0);out.push(g);par=g;}return out;}
+const antO=chain(head,-3,8.8,3,12,3,1.4,[chitD,chit],.35);                                  // antenna organica
+const antM=chain(head,3,8.8,3,9,3.4,1.6,[steel,steelD],-.3);                                 // antenna meccanica
+const tipLed=ball(antM[antM.length-1],lR,1.1,0,1.5,0);box(antM[antM.length-1],4,.6,2.4,0,.8,0,steelL);
+// --- braccetti secondari ---
+const smallArms=[-1,1].map(s=>{const a=grp(torso,s*8,8,4.5);a.rotation.set(-1.1,0,s*.3);box(a,1.8,6,1.8,0,-3,0,chit);
+  const b=grp(a,0,-6,0);b.rotation.x=-1.4;box(b,1.4,5,1.4,0,-2.5,0,chitD);box(b,2.6,1,1,0,-5.2,0,steelL);return {a,b,s};});
+// --- bracci principali ---
+function mkArm(s){
+  const sh=grp(torso,s*11,17,0);box(sh,5.6,5.6,5.6,0,0,0,steel);ball(sh,lC,.9,s*2.9,0,0);
+  box(sh,5,9.5,5,0,-5.4,0,chit);for(let k=0;k<2;k++)box(sh,1,2,1,s*2.8,-3-k*3.2,-1,chitL);box(sh,3.4,6,1,0,-5.4,2.7,steelD);
+  const el=grp(sh,0,-10,0);box(el,5.2,5.2,5.2,0,0,0,steel);return {sh,el};
+}
+// braccio destro (s=-1): spada cibernetica
+const SA=mkArm(-1);
+box(SA.el,4.6,9,4.6,0,-5,0,steelD);box(SA.el,4,5.5,1,0,-4,-2.6,chit);box(SA.el,1.2,6,1.2,1.8,-4.5,2.6,steelL);
+[lG,lA,lR].forEach((m,i)=>box(SA.el,.8,.8,.5,-1.2+i*1.2,-8,2.5,m));
+const hand=grp(SA.el,0,-9.8,0);box(hand,4,3.4,4,0,-1.2,0,steelD);
+const sw=grp(hand,0,-1.5,0),baseObj=new THREE.Object3D(),tipObj=new THREE.Object3D();
+baseObj.position.set(0,0,5*V);tipObj.position.set(0,0,32*V);sw.add(baseObj,tipObj);
+[[-1.8,0],[1.8,0],[0,-1.8]].forEach(([x,y])=>box(sw,1,1,2.6,x,y,.8,steelL));                    // dita sull'impugnatura
+box(sw,2.2,2.2,6,0,0,2,steelD);box(sw,2.8,2.8,1.4,0,0,-1.6,steelL);box(sw,2,7,1.6,0,0,5.2,steel);ball(sw,lC,1.1,0,0,5.8);
+box(sw,1.2,3.6,24,0,0,18,M(0x2a3040));box(sw,1.2,2.4,2.2,0,0,30.6,M(0x2a3040));box(sw,1.2,1.2,1.6,0,-.3,32.2,M(0x2a3040));
+box(sw,.5,.7,24.4,0,-1.9,18,lC);
+for(let i=0;i<7;i++)box(sw,.7,.5,1.4,0,1.6,8+i*3.2,i%2?lC:lG);
+const aura=new THREE.Mesh(new THREE.BoxGeometry(2.8*V,6*V,30*V),GLOW(0x35e8ff,.3));aura.position.set(0,0,18*V);sw.add(aura);
+// braccio sinistro (s=+1): cannone al plasma
+const CA=mkArm(1);
+box(CA.el,6.6,11,6.6,0,-6,0,steelD);box(CA.el,2,9,1.4,3.6,-6,0,chit);
+const coilMats=[3,6,9].map(y=>{const m=BM(0x0a3a44);box(CA.el,7.4,1.4,7.4,0,-y-1,0,steel);box(CA.el,7.7,.7,7.7,0,-y-1.9,0,m);return m;});
+box(CA.el,4.4,6,4.4,0,-14,0,steel);box(CA.el,5.6,1.8,5.6,0,-17.6,0,steelL);box(CA.el,3.4,.6,3.4,0,-18.5,0,dark);
+[lG,lA].forEach((m,i)=>box(CA.el,.8,.8,.5,-1.2+i*1.4,-2,3.4,m));
+const mz=grp(CA.el,0,-18.8,0);
+const beam=new THREE.Group();beam.visible=false;mz.add(beam);
+const bl=(r,c,op)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(1,1,1,14,1,true),GLOW(c,op));m.position.y=-.5;m.scale.set(r,1,r);beam.add(m);return m;};
+const bCore=bl(.1,0xffffff,.95),bMid=bl(.26,0x4af0ff,.6),bOut=bl(.5,0xff40e0,.3);
+const orb=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),GLOW(0x8af8ff,.85)),orb2=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),GLOW(0xff40e0,.35));
+mz.add(orb,orb2);orb.position.y=orb2.position.y=-.1;orb.scale.setScalar(.001);orb2.scale.setScalar(.001);
+const rings=[0,1,2].map(i=>{const r=new THREE.Mesh(new THREE.TorusGeometry(.3,.03,6,18),GLOW(0x8af8ff,.8));r.rotation.x=Math.PI/2;r.position.y=-.1-i*.12;r.visible=false;mz.add(r);return r;});
+const flare=new THREE.Mesh(new THREE.SphereGeometry(1,14,10),GLOW(0xffffff,.9)),shock=[0,1].map(()=>{const r=new THREE.Mesh(new THREE.TorusGeometry(1,.05,6,24),GLOW(0x4af0ff,.7));r.rotation.x=Math.PI/2;mz.add(r);return r;});
+mz.add(flare);flare.visible=false;shock.forEach(s=>s.visible=false);
+const floorGlow=new THREE.Mesh(new THREE.PlaneGeometry(1,1),GLOW(0x4af0ff,.3));floorGlow.rotation.x=-Math.PI/2;floorGlow.visible=false;scene.add(floorGlow);
+const bLight=new THREE.PointLight(0x4af0ff,0,16);scene.add(bLight);
+
+// --- scia della spada (ribbon in coordinate mondo) ---
+const TN=14,tpos=new Float32Array(TN*2*3),tg=new THREE.BufferGeometry();
+tg.setAttribute('position',new THREE.BufferAttribute(tpos,3));
+{const idx=[];for(let i=0;i<TN-1;i++){const a=i*2;idx.push(a,a+1,a+2,a+1,a+3,a+2);}tg.setIndex(idx);}
+const trail=new THREE.Mesh(tg,GLOW(0x6af4ff,.55));trail.frustumCulled=false;scene.add(trail);
+const samples=[];
+function updTrail(on){
+  if(on){const b=new THREE.Vector3(),t=new THREE.Vector3();baseObj.getWorldPosition(b);tipObj.getWorldPosition(t);samples.unshift({b,t});}
+  else if(samples.length)samples.pop();
+  while(samples.length>TN)samples.pop();
+  for(let i=0;i<TN;i++){
+    const s=samples[Math.min(i,samples.length-1)];
+    if(!s){for(let k=0;k<6;k++)tpos[i*6+k]=0;continue;}
+    const f=i/TN*.85;
+    tpos[i*6]=s.b.x+(s.t.x-s.b.x)*f;tpos[i*6+1]=s.b.y+(s.t.y-s.b.y)*f;tpos[i*6+2]=s.b.z+(s.t.z-s.b.z)*f;
+    tpos[i*6+3]=s.t.x;tpos[i*6+4]=s.t.y;tpos[i*6+5]=s.t.z;
+  }
+  tg.attributes.position.needsUpdate=true;
+}
+// --- scintille ---
+const SP=[];for(let i=0;i<80;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(.06,.06,.06),BM(0xffffff));m.visible=false;scene.add(m);SP.push({m,v:new THREE.Vector3(),l:0});}
+function emit(p,n,col,sp){for(let k=0;k<n;k++){const s=SP.find(q=>q.l<=0);if(!s)return;s.m.position.copy(p);s.m.material.color.setHex(col);
+  s.v.set(Math.random()-.5,Math.random()*.9,Math.random()-.5).multiplyScalar(sp);s.l=.4+Math.random()*.4;s.m.visible=true;}}
+function updSp(dt){SP.forEach(s=>{if(s.l<=0)return;s.l-=dt;s.v.y-=9*dt;s.m.position.addScaledVector(s.v,dt);if(s.m.position.y<.03){s.m.position.y=.03;s.v.y*=-.3;}
+  s.m.scale.setScalar(Math.max(.1,s.l*2));if(s.l<=0)s.m.visible=false;});}
+
+// ================= ANIMAZIONI (keyframe) =================
+// sx/sz/ey: spalla (avanti/fuori) e gomito del braccio con la spada · cx/cz/ce: idem per il cannone
+// ty/tl: torsione e inclinazione del busto · lunge: affondo · charge/beam: cannone · blade: luce lama · wing: ali · mand: mandibole
+const B={sx:-.3,sz:.25,ey:-1.2,cx:-.1,cz:.25,ce:-.6,ty:0,tl:.08,hy:0,lunge:0,charge:0,beam:0,blade:.3,trail:0,wing:0,mand:0};
+const CH1={sx:-.15,sz:.1,ey:-1.5,ty:.4,tl:.4,lunge:.6,blade:1,wing:.5},CH2={sx:-.5,sz:.3,ey:-.3,ty:1,tl:.15,lunge:.8,blade:1,wing:.4};
+const AIM={cx:-1.45,cz:.15,ce:-.12,ty:-.3};
+const ANIM={
+  spada:[[0,{}],
+    [.4,{sx:-2.8,sz:.4,ey:-.7,ty:-.6,tl:-.15,blade:.8,wing:.35}],[.52,{sx:-2.8,sz:.4,ey:-.7,ty:-.6,tl:-.15,blade:.9,wing:.4}],
+    [.7,Object.assign({trail:1},CH1)],[.95,Object.assign({trail:1},CH1)],[1,Object.assign({trail:0},CH1)],
+    [1.25,{sx:-.5,sz:1,ey:-.3,ty:-1,tl:.1,lunge:.3,blade:.9,wing:.3}],
+    [1.45,Object.assign({trail:1},CH2)],[1.7,Object.assign({trail:1},CH2)],[1.75,Object.assign({trail:0},CH2)],
+    [2.5,{}]],
+  raggio:[[0,{}],
+    [.5,Object.assign({tl:.05,charge:.15,wing:.2,mand:.4},AIM)],
+    [1.8,Object.assign({tl:-.2,charge:1,wing:.8,mand:1},AIM)],
+    [1.95,Object.assign({tl:-.28,lunge:-.35,charge:.6,beam:1,wing:.9,mand:1},AIM)],
+    [3.5,Object.assign({tl:-.28,lunge:-.25,charge:.4,beam:1,wing:.9,mand:1},AIM)],
+    [3.7,Object.assign({tl:0,wing:.3,mand:.3},AIM)],
+    [4.5,{}]],
+};
+function kf(list,t){
+  const last=list[list.length-1];
+  if(t>=last[0])return Object.assign({},B,last[1]);
+  let a=list[0],b=list[1];
+  for(let i=0;i<list.length-1;i++)if(t>=list[i][0]&&t<list[i+1][0]){a=list[i];b=list[i+1];break;}
+  const u=(t-a[0])/(b[0]-a[0]),e=u*u*(3-2*u),pa=Object.assign({},B,a[1]),pb=Object.assign({},B,b[1]),o={};
+  for(const k in B)o[k]=pa[k]+(pb[k]-pa[k])*e;
+  return o;
+}
+let cur=null,queue=[],walkAmt=0,phase=0,lastBeam=0;
+const NAMES={spada:'Spada cibernetica',raggio:'Raggio al plasma'};
+function play(name){
+  if(cur)return;
+  if(name==='combo'){queue=['raggio'];cur={a:'spada',t:0};}else cur={a:name,t:0};
+  ui();
+}
+
+// ================= APPLICA LA POSA =================
+const wp=new THREE.Vector3(),wd=new THREE.Vector3(),tmp=new THREE.Vector3();
+function apply(p,t,dt){
+  SA.sh.rotation.set(p.sx,0,-p.sz);SA.el.rotation.x=p.ey;
+  CA.sh.rotation.set(p.cx,0,p.cz);CA.el.rotation.x=p.ce;
+  torso.rotation.set(p.tl+Math.sin(t*2)*.015,p.ty,0);
+  head.rotation.set(-p.tl*.5+Math.sin(t*1.3)*.03,-p.ty*.6+p.hy+Math.sin(t*.9)*.08,0);
+  body.position.z=p.lunge;
+  // gambe
+  const spd=Math.min(1,walkAmt);
+  legs.forEach((L,i)=>{
+    const ph=phase+(i?Math.PI:0),hs=Math.sin(ph)*.5*spd,lift=Math.max(0,Math.cos(ph))*.75*spd;
+    L.hip.rotation.x=-.35+hs;L.knee.rotation.x=.8+lift;L.ank.rotation.x=-.45-(hs+lift)*.85;
+  });
+  body.position.y=Math.abs(Math.sin(phase))*.07*spd+Math.sin(t*2)*.01;
+  // ali, mandibole, braccetti
+  wings.forEach(({w,s})=>{w.rotation.z=s*(.1+p.wing*.9)+Math.sin(t*34)*.03*p.wing;w.rotation.x=.12+p.wing*.2;});
+  mand.forEach(({m,s})=>{m.rotation.y=s*(p.mand*.5+Math.sin(t*3)*.05);});
+  smallArms.forEach(({a,b,s})=>{a.rotation.x=-1.1+Math.sin(t*3+s)*.12;b.rotation.x=-1.4+Math.sin(t*4+s*2)*.15;});
+  antO.forEach((g,i)=>{g.rotation.x=-.12+Math.sin(t*2.2+i*.5)*.1;g.rotation.z=Math.sin(t*1.7+i*.45)*.08;});
+  antM.forEach((g,i)=>{g.rotation.x=-.06+Math.sin(t*1.5+i*.4)*.05;g.rotation.z=Math.sin(t*1.2+i*.3)*.05;});
+  tipLed.visible=Math.sin(t*6)>-.2;
+  // luci
+  core.scale.setScalar(1+Math.sin(t*4)*.12+p.charge*.5+p.beam*.2);
+  eyeG.scale.setScalar(1+Math.sin(t*5)*.15+p.charge*.3);
+  nozzles.forEach(n=>n.scale.setScalar(.8+spd*.7+p.wing*.6+Math.sin(t*25)*.1));
+  aura.material.opacity=.12+.4*p.blade+Math.sin(t*20)*.03*p.blade;
+  const cc=Math.max(p.charge,p.beam);coilMats.forEach((m,i)=>m.color.setRGB(.04+.17*cc*(.6+.4*Math.sin(t*12+i)),.23+.7*cc,.27+.73*cc));
+  // cannone: carica
+  const o=p.charge*(1+Math.sin(t*30)*.08);orb.scale.setScalar(Math.max(.001,o*.3));orb2.scale.setScalar(Math.max(.001,o*.46));
+  rings.forEach((r,i)=>{r.visible=p.charge>.05&&p.beam<.5;const k=((t*2.2+i*.33)%1);r.scale.setScalar(1+(1-k)*3.2*p.charge);r.material.opacity=.8*k*p.charge;});
+  mz.getWorldPosition(wp);
+  if(p.charge>.3&&p.beam<.5&&Math.random()<.5){tmp.set((Math.random()-.5)*.8,Math.random()*.4,(Math.random()-.5)*.8).add(wp);emit(tmp,1,0x8af8ff,.5);}
+  // raggio
+  const bm=p.beam,len=16*Math.min(1,bm*1.2);
+  beam.visible=bm>.02;beam.scale.set(1,Math.max(.01,len),1);
+  const pul=1+Math.sin(t*50)*.12;
+  bCore.scale.set(.1*pul,1,.1*pul);bMid.scale.set(.26*pul,1,.26*pul);bOut.scale.set(.5*(1+Math.sin(t*37)*.15),1,.5*(1+Math.sin(t*37)*.15));
+  flare.visible=bm>.3;flare.position.y=-len;flare.scale.setScalar(.7+Math.sin(t*40)*.15);
+  shock.forEach((s,i)=>{s.visible=bm>.3;const k=((t*1.8+i*.5)%1);s.position.y=-len;s.scale.setScalar(.3+k*1.6);s.material.opacity=.7*(1-k);});
+  floorGlow.visible=bm>.3;bLight.intensity=bm*1.8+p.charge*.6;
+  if(bm>.02||p.charge>.05){
+    wd.set(0,-1,0).transformDirection(mz.matrixWorld);
+    floorGlow.position.set(wp.x+wd.x*len/2,.03,wp.z+wd.z*len/2);floorGlow.rotation.z=Math.atan2(wd.x,wd.z);
+    floorGlow.scale.set(2.2,len,1);
+    bLight.position.set(wp.x+wd.x*Math.min(len,5),wp.y,wp.z+wd.z*Math.min(len,5));
+    if(bm>.5){tmp.copy(wp).addScaledVector(wd,len);emit(tmp,3,0xffffff,3);emit(tmp,2,0x4af0ff,4);}
+  }
+  // spada: scia e scintille
+  const on=p.trail>.5;updTrail(on);
+  if(on){tipObj.getWorldPosition(tmp);emit(tmp,3,0xbff8ff,2.2);}
+}
+
+// ================= CAMERA / UI / LOOP =================
+const O={th:0,ph:.38,r:19,tx:0,tz:0,gr:19};
+let auto=false,spin=false,idleT=0,drag=null,yaw=1.1;
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;O.th-=(e.clientX-drag.x)*.006;O.ph=Math.max(.05,Math.min(1.4,O.ph+(e.clientY-drag.y)*.005));drag={x:e.clientX,y:e.clientY};});
+cv.addEventListener('pointerup',()=>drag=null);
+cv.addEventListener('wheel',e=>{O.gr=Math.max(6,Math.min(45,O.gr*(1+e.deltaY*.001)));e.preventDefault();},{passive:false});
+const keys={};
+addEventListener('keydown',e=>{keys[e.code]=1;if(e.code.startsWith('Arrow'))e.preventDefault();
+  if(e.code==='Digit1'||e.code==='Numpad1')play('spada');if(e.code==='Digit2'||e.code==='Numpad2')play('raggio');if(e.code==='Digit3'||e.code==='Numpad3')play('combo');});
+addEventListener('keyup',e=>keys[e.code]=0);
+const bar=document.getElementById('bar'),info=document.getElementById('info');
+function ui(){
+  bar.innerHTML='';
+  const add=(t,on,fn)=>{const b=document.createElement('button');b.textContent=t;if(on)b.className='on';b.onclick=fn;bar.appendChild(b);};
+  add('Spada cibernetica (1)',cur&&cur.a==='spada',()=>play('spada'));
+  add('Raggio al plasma (2)',cur&&cur.a==='raggio',()=>play('raggio'));
+  add('Combo (3)',false,()=>play('combo'));
+  add('Auto-attacco: '+(auto?'sì':'no'),auto,()=>{auto=!auto;ui();});
+  add('Gira camera: '+(spin?'sì':'no'),spin,()=>{spin=!spin;ui();});
+  info.textContent=cur?'Attacco: '+NAMES[cur.a]:'Blatta cyborg alta e in piedi su due zampe: occhio rosso cibernetico, antenna meccanica, reattore sul petto, spada ad energia (destra) e cannone al plasma (sinistra).';
+}
+ui();
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+let last=performance.now(),T=0;
+function frame(ts){
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;T+=dt;
+  // movimento WASD relativo alla camera
+  let f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0),r=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),moving=false;
+  if(f||r){const l=Math.hypot(f,r);f/=l;r/=l;
+    const dx=-Math.sin(O.th)*f+Math.cos(O.th)*r,dz=-Math.cos(O.th)*f-Math.sin(O.th)*r;
+    root.position.x=Math.max(-20,Math.min(20,root.position.x+dx*3*dt));root.position.z=Math.max(-20,Math.min(20,root.position.z+dz*3*dt));
+    let d=Math.atan2(dx,dz)-yaw;d=Math.atan2(Math.sin(d),Math.cos(d));yaw+=d*Math.min(1,dt*8);moving=true;}
+  root.rotation.y=yaw;
+  walkAmt+=((moving?1:0)-walkAmt)*Math.min(1,dt*8);phase+=dt*7*walkAmt;
+  // animazione corrente
+  let p;
+  if(cur){cur.t+=dt;const list=ANIM[cur.a];p=kf(list,cur.t);
+    if(cur.t>=list[list.length-1][0]){cur=queue.length?{a:queue.shift(),t:0}:null;ui();}}
+  else{p=Object.assign({},B);if(auto&&walkAmt<.1){idleT+=dt;if(idleT>1.6){idleT=0;const q=Math.random();play(q<.4?'spada':q<.8?'raggio':'combo');}}}
+  if(p.beam>.5)body.position.x=(Math.random()-.5)*.02;else body.position.x=0;     // vibrazione durante il fascio
+  root.updateMatrixWorld(true);
+  apply(p,T,dt);updSp(dt);
+  if(spin)O.th+=dt*.35;
+  const k=Math.min(1,dt*5);O.tx+=(root.position.x-O.tx)*k;O.tz+=(root.position.z-O.tz)*k;O.r+=(O.gr-O.r)*k;
+  cam.position.set(O.tx+O.r*Math.cos(O.ph)*Math.sin(O.th),3.2+O.r*Math.sin(O.ph),O.tz+O.r*Math.cos(O.ph)*Math.cos(O.th));
+  cam.lookAt(O.tx,3.2,O.tz);
+  renderer.render(scene,cam);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

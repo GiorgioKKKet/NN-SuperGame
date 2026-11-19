@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Statua di Fatos</title>
+<style>
+  :root{--bg:#e9ebf0;--line:#cfd4de;--ink:#1c2030;--panel:rgba(255,255,255,.88);--edge:#b6bdcc;--acc:#3949ab;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}}
+  :root[data-theme="dark"]{--bg:#1b1f2b;--line:#2b3144;--ink:#eef0ff;--panel:rgba(30,35,52,.9);--edge:#46506e;--acc:#8c9bff}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+  #top{position:fixed;top:env(safe-area-inset-top,0px);left:0;right:0;padding:10px 14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;pointer-events:none;font-size:12px}
+  #top b{font-size:16px;letter-spacing:2px}
+  #info{position:fixed;left:50%;transform:translateX(-50%);top:calc(46px + env(safe-area-inset-top,0px));background:var(--panel);border:2px solid var(--edge);padding:6px 12px;font-size:12px;text-align:center;max-width:92vw}
+  #bar{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-size:12px;color:var(--ink);background:var(--panel);border:2px solid var(--edge);padding:8px 12px;cursor:pointer}
+  button.on{border-color:var(--acc);color:var(--acc);font-weight:700}
+</style>
+</head>
+<body>
+<div id="top"><b>STATUA DI FATOS</b><span>trascina: ruota · rotella: zoom</span></div>
+<div id="info"></div>
+<div id="bar"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ================= HELPER =================
+const V=.1;                                   // 1 voxel = 0.1 unita
+const rng=s=>()=>(s=s*16807%2147483647)/2147483647;
+const MC={},M=c=>MC[c]||(MC[c]=new THREE.MeshLambertMaterial({color:c}));
+const TM=cv=>{const t=new THREE.CanvasTexture(cv);t.magFilter=t.minFilter=THREE.NearestFilter;return new THREE.MeshLambertMaterial({map:t});};
+const cvs=(w,h,fn)=>{const c=document.createElement('canvas');c.width=w;c.height=h;fn(c.getContext('2d'));return c;};
+const R=(g,c,x,y,w,h)=>{g.fillStyle=c;g.fillRect(x,y,w||1,h||1);};
+const box=(p,w,h,d,x,y,z,m)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w*V,h*V,d*V),m);o.position.set(x*V,y*V,z*V);o.castShadow=true;p.add(o);return o;};
+const F=(base,o)=>{o=o||{};return [o.r||base,o.l||base,o.t||base,o.b||base,o.f||base,o.k||base].map(x=>typeof x==='number'?M(x):x);}; // +x,-x,+y,-y,+z(fronte),-z(retro)
+const DOWN=new THREE.Vector3(0,-1,0), AX=new THREE.Vector3(1,0,0);
+const qd=d=>new THREE.Quaternion().setFromUnitVectors(DOWN,new THREE.Vector3(d[0],d[1],d[2]).normalize());
+
+// braccio a 2 segmenti: la posa si da' con due direzioni (spalla->gomito, gomito->mano); x e' specchiata da s
+function arm(p,s,x,y,a){
+  const sh=new THREE.Group();sh.position.set(x*V,y*V,0);p.add(sh);
+  const base=qd([a.d1[0]*s,a.d1[1],a.d1[2]]);sh.quaternion.copy(base);
+  box(sh,a.w,a.l1,a.d,0,-a.l1/2,0,a.m1);
+  if(a.up)a.up(sh,s);
+  const el=new THREE.Group();el.position.y=-a.l1*V;sh.add(el);
+  el.quaternion.copy(base).invert().multiply(qd([a.d2[0]*s,a.d2[1],a.d2[2]]));
+  box(el,a.w*.95,a.l2,a.d*.95,0,-a.l2/2,0,a.m2||a.m1);
+  const hd=new THREE.Group();hd.position.y=-a.l2*V;el.add(hd);
+  if(a.hand)a.hand(hd,s);
+  return {sh,base,hold:!!a.hold,s};
+}
+function leg(p,s,gap,hy,a){const g=new THREE.Group();g.position.set(s*gap*V,hy*V,0);p.add(g);box(g,a.w,a.l,a.d,0,-a.l/2,0,a.m);if(a.ex)a.ex(g,s);return g;}
+function head(p,y,o){
+  const h=new THREE.Group();h.position.y=y*V;p.add(h);
+  box(h,o.w||8,8,o.d||8,0,4,0,F(o.skin,{f:o.front,r:o.sr||o.side,l:o.sl||o.side,t:o.top,k:o.back}));
+  box(h,o.neck||3,1.6,o.neck||3,0,-.6,0,M(o.skin));
+  return h;
+}
+const hand=(hd,skin,w)=>box(hd,w||3.4,3,w||3.4,0,-1.5,0,M(skin));
+const FACE=(sk,fn)=>TM(cvs(16,16,g=>{R(g,sk,0,0,16,16);fn(g);}));
+const SIDE=(sk,hc,hn,bc)=>FACE(sk,g=>{R(g,hc,0,0,16,hn);if(bc)R(g,bc,0,10,16,6);R(g,'#cf9873',6,6,3,4);});
+const shoes=(g,c,sole,y)=>{box(g,5.2,3.2,8.4,0,y,1.5,M(c));box(g,5.4,1.1,8.8,0,y-1.05,1.5,M(sole));box(g,4.6,1.2,2.6,0,y+1.5,3.7,M(c));};
+const D1=[.08,-1,0],D2=[.05,-1,.15];
+function person(o){
+  const root=new THREE.Group(),b=new THREE.Group();root.add(b);
+  const hy=o.hip||16,th=o.th||14,tw=o.tw||11,td=o.td||6,aw=o.aw||4,ad=o.ad||4.4;
+  const legs=[-1,1].map(s=>leg(b,s,o.gap||2.5,hy,{w:o.lw||4.8,l:o.ll||hy,d:o.ld||5.6,m:o.lm,ex:o.lex}));
+  box(b,tw,th,td,0,hy+th/2,0,F(o.tc,{f:o.tf,k:o.tk,r:o.tr,l:o.tl}));
+  if(o.bd)o.bd(b,hy,th,tw,td);
+  const h=head(b,hy+th,{skin:o.skin,front:o.ff,side:o.fs,sr:o.fsr,sl:o.fsl,top:M(o.ht||o.skin),back:M(o.hb||o.skin),w:o.hw,d:o.hdp,neck:o.neck});
+  if(o.hdec)o.hdec(h);
+  const ax=tw/2+aw/2-.2,ay=hy+th-1.5;
+  const arms=[1,-1].map(s=>arm(b,s,s*ax,ay,Object.assign({w:aw,l1:6.5,l2:6.5,d:ad,m1:o.am1||M(o.skin),m2:o.am2,d1:D1,d2:D2,hand:hd=>hand(hd,o.skin)},o.arm(s))));
+  return {root,body:b,legs,arms};
+}
+
+// ================= PERSONAGGIO: FATOS =================
+const ak=hd=>{const r=new THREE.Group(),d=M(0x3a2d1e);r.position.y=-1.5*V;hd.add(r);
+  box(r,1.6,2.2,6,0,0,.5,d);box(r,.9,.9,8,0,.7,7.5,d);box(r,1,.7,6,0,1.7,4.5,d);box(r,1.6,1.6,5,0,-.2,5.5,M(0x6a5438));box(r,.5,1.2,.5,0,1.6,11.2,d);
+  box(r,1.3,2.6,7,0,-.5,-6.2,d);box(r,1.2,3,1.4,0,-2.6,-2.2,d);const mg=box(r,1.2,5,1.8,0,-3.8,2,d);mg.rotation.x=-.3;};
+
+function statuaBronzo(){
+  const root=new THREE.Group(),m=new THREE.Group();root.add(m);
+  const br=M(0x4b3b2a),bh=M(0x6a5438),pt=M(0x3f5046),Y=0,hip=Y+10.3;
+  box(m,8,9,18,0,Y+14.8,0,br);box(m,8.6,.8,8,0,Y+19.5,.5,pt);
+  const hl=[[-1,7],[1,7],[-1,-6.5],[1,-6.5]].map(([s,z])=>{const g=new THREE.Group();g.position.set(s*2.7*V,hip*V,z*V);m.add(g);box(g,3.2,5.2,3.6,0,-2.6,0,br);
+    const k=new THREE.Group();k.position.y=-5*V;g.add(k);box(k,2.2,4.4,2.4,0,-2.2,0,br);box(k,2.8,1.2,3.2,0,-4.7,.2,bh);return g;});
+  const n=new THREE.Group();n.position.set(0,(Y+18)*V,8*V);n.rotation.x=.7;m.add(n);box(n,5,10.5,5.6,0,5,0,br);box(n,1.6,10,2.2,0,5,-2.6,bh);
+  const hd=new THREE.Group();hd.position.y=10.5*V;hd.rotation.x=-.2;n.add(hd);box(hd,4,4.2,8.6,0,0,3.4,br);box(hd,3.2,3,3,0,-.7,8,bh);[-1,1].forEach(s=>box(hd,.9,2.2,.9,s*1.3,2.8,-.2,br));
+  const tl=new THREE.Group();tl.position.set(0,(Y+18)*V,-9*V);tl.rotation.x=.5;m.add(tl);box(tl,2.6,11,2.6,0,-5.5,-.4,br);
+  const rb=0x57452f,rs='#57452f',dk=M(0x3a2d1e);
+  const P=person({skin:rb,tc:rb,hip:17,th:14,tw:11.4,td:6.2,aw:4.4,ad:4.6,lm:M(rb),lw:4.8,am1:M(rb),
+    lex:g=>shoes(g,0x3e3022,0x3e3022,-15.4),
+    ff:FACE(rs,g=>{R(g,'#3a2d1e',0,0,16,3);R(g,'#2e2418',3,5,4,1);R(g,'#2e2418',9,5,4,1);R(g,'#2e2418',4,7,2,1);R(g,'#2e2418',10,7,2,1);R(g,'#483924',7,8,2,2);R(g,'#483924',5,10,6,1);R(g,'#2e2418',6,12,4,1);}),
+    fs:SIDE(rs,'#3a2d1e',2),
+    bd:(b,hy,th,tw,td)=>{box(b,tw+.4,1.2,td+.4,0,hy+.8,0,dk);[-1,1].forEach(s=>box(b,2.6,3,1.6,s*3.2,hy+2.2,td/2+.8,dk));box(b,1.2,15,td+.5,2.4,hy+th/2,0,dk);},
+    hdec:h=>{box(h,9.2,3,9,0,8.2,0,dk);box(h,9.2,.8,3,0,7.2,4.4,M(0x2e2418));},   // berretto
+    arm:s=>s===1?{hold:1,d1:[.12,1,.2],d2:[.2,1,.5],hand:hd=>{hand(hd,rb,4.4);ak(hd);}}:{hold:1,d1:[.25,-.5,.7],d2:[-.15,-.1,1],hand:hd=>{hand(hd,rb,4.4);ak(hd);}}});   // due kalashnikov
+  P.legs.forEach((l,i)=>{l.rotation.x=-.15;l.rotation.z=(i?1:-1)*.28;});
+  P.root.position.set(0,(Y+19.9-17)*V,-1*V);m.add(P.root);
+  return {root,body:m,legs:[new THREE.Group(),new THREE.Group()],arms:P.arms,walk:(w,a)=>{hl[0].rotation.x=hl[3].rotation.x=w*a*.8;hl[1].rotation.x=hl[2].rotation.x=-w*a*.8;}};
+}
+
+// ================= SCENA =================
+const CH=[
+  {n:'Fatos',mk:statuaBronzo,gr:14,info:'Militare di bronzo in sella a un cavallo, senza basamento, con un kalashnikov alzato in una mano e un altro nell\'altra. Se lo fai camminare, il cavallo muove le zampe.'},
+];
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(34,1,.1,200);
+scene.add(new THREE.HemisphereLight(0xffffff,0x9aa0b4,.85));
+const sun=new THREE.DirectionalLight(0xffffff,.75);sun.position.set(9,22,14);sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);
+Object.assign(sun.shadow.camera,{left:-26,right:26,top:26,bottom:-26,near:1,far:70});scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshLambertMaterial({color:0xffffff}));
+ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+function theme(){
+  const cs=getComputedStyle(document.documentElement),bg=cs.getPropertyValue('--bg').trim(),ln=cs.getPropertyValue('--line').trim();
+  scene.background=new THREE.Color(bg);
+  const t=new THREE.CanvasTexture(cvs(64,64,g=>{R(g,bg,0,0,64,64);R(g,ln,0,0,64,1);R(g,ln,0,0,1,64);}));
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(200,200);t.anisotropy=8;ground.material.map=t;ground.material.needsUpdate=true;
+}
+theme();matchMedia('(prefers-color-scheme: dark)').addEventListener('change',theme);
+const chars=CH.map((c,i)=>{const o=c.mk();o.root.position.set(0,0,0);o.yaw=.5;scene.add(o.root);return o;});
+
+// ================= CAMERA / UI =================
+const O={th:0,ph:.5,r:20,tx:0,tz:0,ty:2.2,gr:CH[0].gr};
+let sel=0,walk=false,auto=true,drag=null;
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{if(!drag)return;O.th-=(e.clientX-drag.x)*.006;O.ph=Math.max(.05,Math.min(1.4,O.ph+(e.clientY-drag.y)*.005));drag={x:e.clientX,y:e.clientY};});
+cv.addEventListener('pointerup',()=>drag=null);
+cv.addEventListener('wheel',e=>{O.gr=Math.max(5,Math.min(50,O.gr*(1+e.deltaY*.001)));e.preventDefault();},{passive:false});
+const keys={};addEventListener('keydown',e=>{keys[e.code]=1;if(e.code.startsWith('Arrow'))e.preventDefault();});addEventListener('keyup',e=>keys[e.code]=0);
+const bar=document.getElementById('bar'),info=document.getElementById('info');
+function ui(){
+  bar.innerHTML='';
+  const add=(t,on,fn)=>{const b=document.createElement('button');b.textContent=t;if(on)b.className='on';b.onclick=fn;bar.appendChild(b);};
+  add('Gira: '+(auto?'sì':'no'),auto,()=>{auto=!auto;ui();});
+  add('Cammina (WASD/frecce): '+(walk?'sì':'no'),walk,()=>{walk=!walk;ui();});
+  info.textContent=CH[0].n+' — '+CH[0].info;
+}
+ui();
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+function animate(c,t,moving){
+  const w=moving?Math.sin(t*10):0,amp=moving?.75:0;
+  c.legs[0].rotation.x=w*amp;c.legs[1].rotation.x=-w*amp;
+  c.arms.forEach(a=>{if(!a.hold)a.sh.quaternion.setFromAxisAngle(AX,-w*amp*.8*a.s).multiply(a.base);});
+  c.body.position.y=moving?Math.abs(Math.sin(t*10))*.05:Math.sin(t*2)*.01;
+  if(c.walk)c.walk(w,amp);if(c.fx)c.fx(t);
+}
+let last=performance.now(),T=0;
+function frame(ts){
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;T+=dt;
+  chars.forEach((c,i)=>{
+    let moving=false;
+    if(walk&&i===sel){
+      let f=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0),r=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0);
+      if(f||r){const l=Math.hypot(f,r);f/=l;r/=l;
+        const dx=-Math.sin(O.th)*f+Math.cos(O.th)*r,dz=-Math.cos(O.th)*f-Math.sin(O.th)*r;
+        c.root.position.x=Math.max(-24,Math.min(24,c.root.position.x+dx*4*dt));c.root.position.z=Math.max(-24,Math.min(24,c.root.position.z+dz*4*dt));
+        let d=Math.atan2(dx,dz)-c.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));c.yaw+=d*Math.min(1,dt*12);moving=true;}
+    } else if(auto) c.yaw+=dt*.7;
+    c.root.rotation.y=c.yaw;animate(c,T,moving);
+  });
+  const tgt=chars[sel].root.position;
+  const k=Math.min(1,dt*5);O.tx+=(tgt.x-O.tx)*k;O.tz+=(tgt.z-O.tz)*k;O.ty+=(2-O.ty)*k;O.r+=(O.gr-O.r)*k;
+  cam.position.set(O.tx+O.r*Math.cos(O.ph)*Math.sin(O.th),O.ty+O.r*Math.sin(O.ph),O.tz+O.r*Math.cos(O.ph)*Math.cos(O.th));
+  cam.lookAt(O.tx,O.ty,O.tz);
+  renderer.render(scene,cam);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
